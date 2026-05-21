@@ -4,10 +4,12 @@ import re
 import os
 import random
 import requests
-from typing import List, Dict, Optional
+from typing import List, Dict
 from .utils import clean_unicode
 
-AI_PROVIDER = os.environ.get("AI_PROVIDER", "gemini").lower()
+def _get_ai_provider() -> str:
+    """Dynamically get AI provider from environment variable."""
+    return os.environ.get("AI_PROVIDER", "local").lower()
 
 
 class AIRewriteError(Exception):
@@ -79,9 +81,31 @@ def _call_huggingface(messages: List[Dict], temperature: float = 0.8, max_tokens
     resp.raise_for_status()
     data = resp.json()
     
-    if isinstance(data, list) and len(data) > 0:
-        return clean_unicode(data[0].get("generated_text", "").replace(prompt, "").strip())
-    return clean_unicode(str(data))
+    if isinstance(data, dict):
+        if "generated_text" in data:
+            result = data["generated_text"]
+        elif "text" in data:
+            result = data["text"]
+        elif isinstance(data.get("choices"), list) and len(data["choices"]) > 0:
+            choice = data["choices"][0]
+            result = choice.get("text", choice.get("generated_text", ""))
+        else:
+            raise AIRewriteError(f"Unexpected HuggingFace response format: {json.dumps(data)[:200]}")
+    elif isinstance(data, list) and len(data) > 0:
+        first_item = data[0]
+        if isinstance(first_item, dict):
+            result = first_item.get("generated_text", first_item.get("text", ""))
+        elif isinstance(first_item, str):
+            result = first_item
+        else:
+            result = str(first_item)
+    else:
+        raise AIRewriteError(f"Unexpected HuggingFace response format: {type(data).__name__}")
+    
+    if result:
+        result = result.replace(prompt, "").strip()
+    
+    return clean_unicode(result)
 
 
 def _simple_local_select_top3(topics: List[Dict]) -> List[Dict]:
@@ -166,6 +190,11 @@ def _call_ai(messages: List[Dict], temperature: float = 0.8, max_tokens: int = 2
         "huggingface": _call_huggingface
     }
     
+    provider = _get_ai_provider()
+    
+    if provider == "local":
+        raise ValueError("Local mode does not use _call_ai.")
+    
     sanitized = []
     for msg in messages:
         m = msg.copy()
@@ -173,14 +202,14 @@ def _call_ai(messages: List[Dict], temperature: float = 0.8, max_tokens: int = 2
             m["content"] = clean_unicode(m["content"])
         sanitized.append(m)
     
-    if AI_PROVIDER in providers:
+    if provider in providers:
         try:
-            return providers[AI_PROVIDER](sanitized, temperature, max_tokens)
+            return providers[provider](sanitized, temperature, max_tokens)
         except (ValueError, requests.exceptions.RequestException) as e:
-            print(f"Failed to call {AI_PROVIDER}: {e}, falling back to local")
+            print(f"Failed to call {provider}: {e}, falling back to local")
             raise AIRewriteError(f"AI服务不可用: {str(e)}")
     
-    raise ValueError(f"Unknown AI provider: {AI_PROVIDER}")
+    raise ValueError(f"Unknown AI provider: {provider}")
 
 
 def _call_deepseek(messages: List[Dict], temperature: float = 0.8, max_tokens: int = 2048) -> str:
@@ -210,7 +239,7 @@ def _call_deepseek(messages: List[Dict], temperature: float = 0.8, max_tokens: i
 
 
 def select_top3_for_viral(topics: List[Dict]) -> List[Dict]:
-    if AI_PROVIDER == "local":
+    if _get_ai_provider() == "local":
         return _simple_local_select_top3(topics)
     
     topic_list = "\n".join(
@@ -241,7 +270,7 @@ def select_top3_for_viral(topics: List[Dict]) -> List[Dict]:
 
 
 def rewrite_to_micro_headline(topic_name: str) -> str:
-    if AI_PROVIDER == "local":
+    if _get_ai_provider() == "local":
         return _simple_local_rewrite_micro(topic_name)
     
     system_prompt = (
@@ -268,7 +297,7 @@ def rewrite_to_micro_headline(topic_name: str) -> str:
 
 
 def evaluate_traffic_potential(micro_text: str) -> Dict[str, str]:
-    if AI_PROVIDER == "local":
+    if _get_ai_provider() == "local":
         return _simple_local_evaluate(micro_text)
     
     system_prompt = (
@@ -298,7 +327,7 @@ def evaluate_traffic_potential(micro_text: str) -> Dict[str, str]:
 
 
 def select_top3_for_articles(topics: List[Dict]) -> List[Dict]:
-    if AI_PROVIDER == "local":
+    if _get_ai_provider() == "local":
         return _simple_local_select_top3(topics)
     
     topic_list = "\n".join(
@@ -329,7 +358,7 @@ def select_top3_for_articles(topics: List[Dict]) -> List[Dict]:
 
 
 def rewrite_to_article(topic_name: str) -> Dict[str, str]:
-    if AI_PROVIDER == "local":
+    if _get_ai_provider() == "local":
         return _simple_local_rewrite_article(topic_name)
     
     system_prompt = (
@@ -361,7 +390,7 @@ def rewrite_to_article(topic_name: str) -> Dict[str, str]:
 
 
 def evaluate_article(article_text: str) -> Dict[str, str]:
-    if AI_PROVIDER == "local":
+    if _get_ai_provider() == "local":
         return _simple_local_evaluate(article_text)
     
     system_prompt = (

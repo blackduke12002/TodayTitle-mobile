@@ -69,26 +69,27 @@ def _fetch_from_toutiao(limit: int) -> List[Dict]:
     resp.raise_for_status()
     
     content_encoding = resp.headers.get("Content-Encoding", "")
+    
     try:
-        data = resp.json()
-        test_text = json.dumps(data, ensure_ascii=False)
-        if "æ" in test_text[:1000]:
-            if content_encoding == "br" and len(resp.content) > 0 and BROTLI_AVAILABLE:
-                try:
-                    decompressed = brotli.decompress(resp.content)
-                    data = json.loads(decompressed.decode("utf-8"))
-                except Exception:
-                    resp.encoding = "utf-8"
-                    data = json.loads(resp.text)
-            else:
+        if content_encoding == "br" and len(resp.content) > 0 and BROTLI_AVAILABLE:
+            try:
+                decompressed = brotli.decompress(resp.content)
+                data = json.loads(decompressed.decode("utf-8"))
+            except Exception:
                 resp.encoding = "utf-8"
                 data = json.loads(resp.text)
-    except Exception:
-        try:
+        else:
             resp.encoding = "utf-8"
             data = json.loads(resp.text)
-        except Exception as e2:
-            raise HotspotFetchError(f"解析失败: {e2}")
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        if content_encoding == "br" and BROTLI_AVAILABLE:
+            try:
+                decompressed = brotli.decompress(resp.content)
+                data = json.loads(decompressed.decode("utf-8"))
+            except Exception as e2:
+                raise HotspotFetchError(f"解析失败: {e2}")
+        else:
+            raise HotspotFetchError(f"解析失败: {e}")
 
     items = data.get("data", [])
     if not items:
