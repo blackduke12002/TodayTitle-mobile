@@ -25,20 +25,15 @@ jobs:
       with:
         api-level: 34
         build-tools: '34.0.0'
-        ndk: '25.1.8937393'
-        cmake: '3.22.1'
 
-    - name: Install Gradle
-      run: sudo apt-get update && sudo apt-get install -y gradle
-
-    - name: Check Gradle version
-      run: gradle --version
+    - name: Make gradlew executable
+      run: chmod +x android/gradlew
 
     - name: Build Debug APK
-      run: cd android && gradle assembleDebug
+      run: cd android && ./gradlew assembleDebug
 
     - name: Build Release APK
-      run: cd android && gradle assembleRelease
+      run: cd android && ./gradlew assembleRelease
 
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4
