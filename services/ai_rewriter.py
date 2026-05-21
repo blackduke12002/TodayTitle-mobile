@@ -1,12 +1,38 @@
 """DeepSeek AI calls: select + rewrite + evaluate for micro-headlines and articles."""
 import json
 import re
+import os
 import requests
 from typing import List, Dict
+from .utils import clean_unicode
 
 DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
-DEEPSEEK_KEY = "sk-cc3b88858f184b4486c7cc29e125ccc9"
+DEEPSEEK_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
 MODEL = "deepseek-chat"
+
+
+def _get_api_key() -> str:
+    """获取DeepSeek API Key，在需要时才验证"""
+    if not DEEPSEEK_KEY:
+        raise ValueError("请设置环境变量 DEEPSEEK_API_KEY")
+    return DEEPSEEK_KEY
+
+
+def _sanitize_messages(messages: List[Dict]) -> List[Dict]:
+    """清理所有消息内容，确保 API 能正常解析"""
+    sanitized = []
+    for msg in messages:
+        m = msg.copy()
+        if "content" in m and isinstance(m["content"], str):
+            m["content"] = clean_unicode(m["content"])
+        elif "content" in m and isinstance(m["content"], list):
+            m["content"] = [
+                {**part, "text": clean_unicode(part.get("text", ""))}
+                if part.get("type") == "text" else part
+                for part in m["content"]
+            ]
+        sanitized.append(m)
+    return sanitized
 
 
 class AIRewriteError(Exception):
@@ -15,13 +41,15 @@ class AIRewriteError(Exception):
 
 def _call_deepseek(messages: List[Dict], temperature: float = 0.8,
                    max_tokens: int = 2048) -> str:
+    api_key = _get_api_key()
     headers = {
-        "Authorization": f"Bearer {DEEPSEEK_KEY}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
+    sanitized_messages = _sanitize_messages(messages)
     payload = {
         "model": MODEL,
-        "messages": messages,
+        "messages": sanitized_messages,
         "temperature": temperature,
         "max_tokens": max_tokens,
     }
@@ -32,7 +60,8 @@ def _call_deepseek(messages: List[Dict], temperature: float = 0.8,
     if "choices" not in data or not data["choices"]:
         raise AIRewriteError(f"AI返回异常: {json.dumps(data, ensure_ascii=False)[:200]}")
 
-    return data["choices"][0]["message"]["content"]
+    content = data["choices"][0]["message"]["content"]
+    return clean_unicode(content)
 
 
 def select_top3_for_viral(topics: List[Dict]) -> List[Dict]:
@@ -153,7 +182,7 @@ def rewrite_to_article(topic_name: str) -> Dict[str, str]:
         "5. 口语化但不失深度，像资深职场人在分享洞察\n\n"
         "请严格按以下JSON格式返回，不要输出其他内容：\n"
         '{"title": "文章标题", "summary": "导语一句话", '
-        '"body": "正文内容（用\\\\n\\\\n分隔自然段落）"}'
+        '"body": "正文内容（用\\n\\n分隔自然段落）"}'
     )
     user_prompt = f"热点话题：{topic_name}\n\n请将上述热点写成一篇今日头条爆款职场分析文章。"
 

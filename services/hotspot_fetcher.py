@@ -1,6 +1,10 @@
 """Fetch Toutiao hot topics — TenAPI primary, direct scrape fallback."""
 import requests
+import re
+import json
+import brotli
 from typing import List, Dict
+from .utils import clean_unicode
 
 TENAPI_URL = "https://tenapi.cn/v2/toutiaohot"
 TOUTIAO_URL = "https://www.toutiao.com/hot-event/hot-board/?origin=toutiao_pc"
@@ -38,8 +42,8 @@ def _fetch_from_tenapi(limit: int) -> List[Dict]:
     result = []
     for item in items[:limit]:
         result.append({
-            "name": item.get("name", ""),
-            "url": item.get("url", ""),
+            "name": clean_unicode(item.get("name", "")),
+            "url": clean_unicode(item.get("url", "")),
             "hot": _format_hot(item.get("hot", "")),
         })
     return result
@@ -54,9 +58,31 @@ def _fetch_from_toutiao(limit: int) -> List[Dict]:
         ),
         "Referer": "https://www.toutiao.com/",
     }
+    
     resp = requests.get(TOUTIAO_URL, headers=headers, timeout=15)
     resp.raise_for_status()
-    data = resp.json()
+    
+    content_encoding = resp.headers.get("Content-Encoding", "")
+    try:
+        data = resp.json()
+        test_text = json.dumps(data, ensure_ascii=False)
+        if "æ" in test_text[:1000]:
+            if content_encoding == "br" and len(resp.content) > 0:
+                try:
+                    decompressed = brotli.decompress(resp.content)
+                    data = json.loads(decompressed.decode("utf-8"))
+                except Exception:
+                    resp.encoding = "utf-8"
+                    data = json.loads(resp.text)
+            else:
+                resp.encoding = "utf-8"
+                data = json.loads(resp.text)
+    except Exception:
+        try:
+            resp.encoding = "utf-8"
+            data = json.loads(resp.text)
+        except Exception as e2:
+            raise HotspotFetchError(f"解析失败: {e2}")
 
     items = data.get("data", [])
     if not items:
@@ -65,8 +91,8 @@ def _fetch_from_toutiao(limit: int) -> List[Dict]:
     result = []
     for item in items[:limit]:
         result.append({
-            "name": item.get("Title", ""),
-            "url": item.get("Url", ""),
+            "name": clean_unicode(item.get("Title", "")),
+            "url": clean_unicode(item.get("Url", "")),
             "hot": _format_hot(item.get("HotValue", "")),
         })
     return result

@@ -11,6 +11,7 @@ from services.ai_rewriter import (
     select_top3_for_articles, rewrite_to_article,
     evaluate_article, AIRewriteError,
 )
+import pyperclip
 
 st.set_page_config(
     page_title="今日爆款内容生成器",
@@ -125,8 +126,8 @@ if clear_clicked:
 if st.session_state.hotspots_fetched:
     st.markdown("**今日头条热榜 Top 5:**")
     for i, t in enumerate(st.session_state.hotspots):
-        hot_text = f" ({t['hot']})" if t.get("hot") else ""
-        st.markdown(f'<div class="hot-item">{i + 1}. {t["name"]}<small style="color:#888">{hot_text}</small></div>',
+        hot_text = f" ({t['hot']})" if t.get('hot') else ""
+        st.markdown(f'<div class="hot-item">{i + 1}. {t["name"]}<small style="color:#888;">{hot_text}</small></div>',
                     unsafe_allow_html=True)
 
 st.markdown("---")
@@ -206,7 +207,11 @@ with tab1:
                 col_btn1, col_btn2 = st.columns(2)
                 with col_btn1:
                     if st.button(f"📋 复制", key=f"copy_micro_{i}"):
-                        st.toast("已复制到剪贴板", icon="✅")
+                        try:
+                            pyperclip.copy(text)
+                            st.toast("已复制到剪贴板", icon="✅")
+                        except Exception:
+                            st.toast("复制失败，请手动复制", icon="❌")
                 with col_btn2:
                     if st.button(f"🔄 重新生成", key=f"regen_micro_{i}"):
                         if i < len(st.session_state.get("selected_micro", [])):
@@ -300,7 +305,11 @@ with tab2:
                 col_btn1, col_btn2 = st.columns(2)
                 with col_btn1:
                     if st.button(f"📋 复制", key=f"copy_article_{i}"):
-                        st.toast("已复制到剪贴板", icon="✅")
+                        try:
+                            pyperclip.copy(formatted)
+                            st.toast("已复制到剪贴板", icon="✅")
+                        except Exception:
+                            st.toast("复制失败，请手动复制", icon="❌")
                 with col_btn2:
                     if st.button(f"🔄 重新生成", key=f"regen_article_{i}"):
                         if i < len(st.session_state.get("selected_article", [])):
