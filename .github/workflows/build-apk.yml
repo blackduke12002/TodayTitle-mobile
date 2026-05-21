@@ -28,16 +28,19 @@ jobs:
         ndk: '25.1.8937393'
         cmake: '3.22.1'
 
+    - name: Check Gradle version
+      run: cd android && ./gradlew --version
+
     - name: Build Debug APK
       run: |
         cd android
         chmod +x gradlew
-        ./gradlew assembleDebug
+        ./gradlew assembleDebug --info 2>&1 | tail -100
 
     - name: Build Release APK
       run: |
         cd android
-        ./gradlew assembleRelease
+        ./gradlew assembleRelease --info 2>&1 | tail -100
 
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4
