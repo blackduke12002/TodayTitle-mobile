@@ -44,19 +44,23 @@ st.markdown("""
     }
     .eval-box {
         border-left: 4px solid #4A90D9;
-        padding: 8px 12px;
-        margin: 8px 0;
-        font-size: 0.85rem;
-        border-radius: 6px;
-        background-color: #252525;
+        padding: 10px 14px;
+        margin: 10px 0;
+        font-size: 0.9rem;
+        border-radius: 8px;
+        background-color: #1a1a2e;
+        color: #ffffff;
+        line-height: 1.6;
     }
     .eval-box-article {
         border-left: 4px solid #e67e22;
-        padding: 8px 12px;
-        margin: 8px 0;
-        font-size: 0.85rem;
-        border-radius: 6px;
-        background-color: #252525;
+        padding: 10px 14px;
+        margin: 10px 0;
+        font-size: 0.9rem;
+        border-radius: 8px;
+        background-color: #1a1a2e;
+        color: #ffffff;
+        line-height: 1.6;
     }
     .hot-item {
         padding: 4px 0;
@@ -79,6 +83,59 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown('<p class="title-text">📰 今日爆款内容生成器</p>', unsafe_allow_html=True)
+
+# ── AI Provider Selection ──
+st.sidebar.markdown("### ⚙️ AI 设置")
+
+ai_provider = st.sidebar.selectbox(
+    "选择 AI 提供商",
+    ["本地模式（免费）", "Gemini（免费额度）", "DeepSeek", "HuggingFace"],
+    index=0,
+    help="本地模式无需 API Key，直接使用模板生成"
+)
+
+if ai_provider == "本地模式（免费）":
+    os.environ["AI_PROVIDER"] = "local"
+    st.sidebar.success("使用本地模式，无需 API Key")
+elif ai_provider == "Gemini（免费额度）":
+    os.environ["AI_PROVIDER"] = "gemini"
+    gemini_key = st.sidebar.text_input(
+        "Google API Key",
+        type="password",
+        placeholder="请输入 Google API Key",
+        help="获取地址: https://makersuite.google.com/"
+    )
+    if gemini_key:
+        os.environ["GOOGLE_API_KEY"] = gemini_key
+        st.sidebar.success("Gemini API Key 已设置")
+    else:
+        st.sidebar.warning("请设置 Google API Key")
+elif ai_provider == "DeepSeek":
+    os.environ["AI_PROVIDER"] = "deepseek"
+    deepseek_key = st.sidebar.text_input(
+        "DeepSeek API Key",
+        type="password",
+        placeholder="请输入 DeepSeek API Key",
+        help="获取地址: https://platform.deepseek.com/"
+    )
+    if deepseek_key:
+        os.environ["DEEPSEEK_API_KEY"] = deepseek_key
+        st.sidebar.success("DeepSeek API Key 已设置")
+    else:
+        st.sidebar.warning("请设置 DeepSeek API Key")
+elif ai_provider == "HuggingFace":
+    os.environ["AI_PROVIDER"] = "huggingface"
+    hf_key = st.sidebar.text_input(
+        "HuggingFace API Key",
+        type="password",
+        placeholder="请输入 HuggingFace API Key",
+        help="获取地址: https://huggingface.co/settings/tokens"
+    )
+    if hf_key:
+        os.environ["HUGGINGFACE_API_KEY"] = hf_key
+        st.sidebar.success("HuggingFace API Key 已设置")
+    else:
+        st.sidebar.warning("请设置 HuggingFace API Key")
 
 # ── Session state init ──
 for key, default in {
@@ -107,21 +164,13 @@ if fetch_clicked:
             topics = fetch_hot_topics(limit=5)
             st.session_state.hotspots = topics
             st.session_state.hotspots_fetched = True
-            st.session_state.micro_generated = False
-            st.session_state.article_generated = False
-            for i in range(3):
-                st.session_state[f"micro_{i}"] = ""
-                st.session_state[f"micro_eval_{i}"] = {}
-                st.session_state[f"article_{i}"] = {}
-                st.session_state[f"article_eval_{i}"] = {}
             st.success(f"获取成功！{len(topics)} 个热点")
         except HotspotFetchError as e:
             st.error(f"获取失败: {e}")
 
 if clear_clicked:
-    for key in list(st.session_state.keys()):
-        del st.session_state[key]
-    st.rerun()
+    st.session_state.hotspots = []
+    st.session_state.hotspots_fetched = False
 
 if st.session_state.hotspots_fetched:
     st.markdown("**今日头条热榜 Top 5:**")
@@ -200,11 +249,11 @@ with tab1:
                     og = eval_data.get("originality", "")
 
                     st.markdown(f"""<div class="eval-box">
-                        <b style="color:#4A90D9;">流量预估：</b><b>{tl}</b> — {tc}<br>
-                        <b style="color:#f0c040;">原创性：</b>{og}
+                        <b style="color:#64B5F6;">📊 流量预估：</b><b style="color:#FFD54F;">{tl}</b> — <span style="color:#E0E0E0;">{tc}</span><br>
+                        <b style="color:#FFB74D;">✏️ 原创性：</b><span style="color:#E0E0E0;">{og}</span>
                     </div>""", unsafe_allow_html=True)
 
-                col_btn1, col_btn2 = st.columns(2)
+                col_btn1, col_btn2, col_btn3 = st.columns(3)
                 with col_btn1:
                     if st.button(f"📋 复制", key=f"copy_micro_{i}"):
                         try:
@@ -224,6 +273,11 @@ with tab1:
                                 except Exception:
                                     pass
                             st.rerun()
+                with col_btn3:
+                    if st.button(f"🗑️ 清空", key=f"clear_micro_{i}"):
+                        st.session_state[f"micro_{i}"] = ""
+                        st.session_state[f"micro_eval_{i}"] = {}
+                        st.rerun()
 
                 st.markdown('</div>', unsafe_allow_html=True)
 
@@ -298,11 +352,11 @@ with tab2:
                     og = eval_data.get("originality", "")
 
                     st.markdown(f"""<div class="eval-box-article">
-                        <b style="color:#e67e22;">流量预估：</b><b>{tl}</b> — {tc}<br>
-                        <b style="color:#f0c040;">原创性：</b>{og}
+                        <b style="color:#FFA726;">📊 流量预估：</b><b style="color:#FFD54F;">{tl}</b> — <span style="color:#E0E0E0;">{tc}</span><br>
+                        <b style="color:#FFB74D;">✏️ 原创性：</b><span style="color:#E0E0E0;">{og}</span>
                     </div>""", unsafe_allow_html=True)
 
-                col_btn1, col_btn2 = st.columns(2)
+                col_btn1, col_btn2, col_btn3 = st.columns(3)
                 with col_btn1:
                     if st.button(f"📋 复制", key=f"copy_article_{i}"):
                         try:
@@ -323,6 +377,11 @@ with tab2:
                                 except Exception:
                                     pass
                             st.rerun()
+                with col_btn3:
+                    if st.button(f"🗑️ 清空", key=f"clear_article_{i}"):
+                        st.session_state[f"article_{i}"] = {}
+                        st.session_state[f"article_eval_{i}"] = {}
+                        st.rerun()
 
                 st.markdown('</div>', unsafe_allow_html=True)
 

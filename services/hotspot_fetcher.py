@@ -2,8 +2,14 @@
 import requests
 import re
 import json
-import brotli
 from typing import List, Dict
+
+try:
+    import brotli
+    BROTLI_AVAILABLE = True
+except ImportError:
+    BROTLI_AVAILABLE = False
+
 from .utils import clean_unicode
 
 TENAPI_URL = "https://tenapi.cn/v2/toutiaohot"
@@ -67,7 +73,7 @@ def _fetch_from_toutiao(limit: int) -> List[Dict]:
         data = resp.json()
         test_text = json.dumps(data, ensure_ascii=False)
         if "æ" in test_text[:1000]:
-            if content_encoding == "br" and len(resp.content) > 0:
+            if content_encoding == "br" and len(resp.content) > 0 and BROTLI_AVAILABLE:
                 try:
                     decompressed = brotli.decompress(resp.content)
                     data = json.loads(decompressed.decode("utf-8"))
