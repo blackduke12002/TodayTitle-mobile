@@ -26,17 +26,19 @@ jobs:
       with:
         api-level: 34
         build-tools: '34.0.0'
-        ndk: '25.2.9519653'
-        cmake: '3.22.1'
 
-    - name: Make gradlew executable
-      run: chmod +x android/gradlew
+    - name: Set up Gradle
+      uses: gradle/actions/setup-gradle@v3
+      with:
+        gradle-version: '8.5'
 
     - name: Build Debug APK
-      run: cd android && ./gradlew assembleDebug --stacktrace -x test
+      working-directory: android
+      run: gradle assembleDebug --stacktrace -x test
 
     - name: Build Release APK
-      run: cd android && ./gradlew assembleRelease --stacktrace -x test
+      working-directory: android
+      run: gradle assembleRelease --stacktrace -x test
 
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4
