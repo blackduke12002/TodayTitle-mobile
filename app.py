@@ -122,19 +122,84 @@ elif ai_provider == "Gemini（免费额度）":
         st.sidebar.warning("请设置 Google API Key")
 elif ai_provider == "DeepSeek":
     os.environ["AI_PROVIDER"] = "deepseek"
+
+    # ── Base URL ──
+    default_url = _get_secret_or_env("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1/chat/completions")
+    base_url = st.sidebar.text_input(
+        "Base URL",
+        value=default_url,
+        placeholder="https://api.deepseek.com/v1/chat/completions",
+        help="API 端点地址，支持任何 OpenAI 兼容接口",
+        key="deepseek_base_url",
+    )
+    if base_url:
+        os.environ["DEEPSEEK_BASE_URL"] = base_url
+
+    # ── Model ──
+    default_model = _get_secret_or_env("DEEPSEEK_MODEL", "deepseek-chat")
+    model = st.sidebar.text_input(
+        "Model",
+        value=default_model,
+        placeholder="deepseek-chat",
+        help="模型名称，如 deepseek-chat、gpt-4o、glm-4 等",
+        key="deepseek_model",
+    )
+    if model:
+        os.environ["DEEPSEEK_MODEL"] = model
+
+    # ── API Key ──
     prefill_key = _get_secret_or_env("DEEPSEEK_API_KEY")
     deepseek_key = st.sidebar.text_input(
         "DeepSeek API Key",
         type="password",
         value=prefill_key,
         placeholder="请输入 DeepSeek API Key",
-        help="获取地址: https://platform.deepseek.com/"
+        help="获取地址: https://platform.deepseek.com/",
+        key="deepseek_key",
     )
     if deepseek_key:
         os.environ["DEEPSEEK_API_KEY"] = deepseek_key
-        st.sidebar.success("DeepSeek API Key 已设置")
+
+    # ── Key status ──
+    col_status, col_test = st.sidebar.columns([3, 1])
+    if deepseek_key:
+        col_status.success("Key 已设置")
     else:
-        st.sidebar.warning("请设置 DeepSeek API Key")
+        col_status.warning("请设置 API Key")
+
+    if col_test.button("测试", key="test_deepseek", use_container_width=True):
+        if not deepseek_key:
+            st.sidebar.error("请先填写 API Key")
+        else:
+            with st.sidebar:
+                with st.spinner("测试连接..."):
+                    try:
+                        import requests as _r
+                        resp = _r.post(
+                            base_url or "https://api.deepseek.com/v1/chat/completions",
+                            headers={
+                                "Authorization": f"Bearer {deepseek_key}",
+                                "Content-Type": "application/json",
+                            },
+                            json={
+                                "model": model or "deepseek-chat",
+                                "messages": [{"role": "user", "content": "hi"}],
+                                "max_tokens": 5,
+                            },
+                            timeout=30,
+                        )
+                        if resp.status_code == 200:
+                            st.success("连接成功！API Key 有效")
+                        elif resp.status_code == 401:
+                            st.error("API Key 无效(401)")
+                        elif resp.status_code == 402:
+                            st.error("余额不足(402)")
+                        elif resp.status_code == 429:
+                            st.error("请求频率超限(429)")
+                        else:
+                            st.error(f"请求失败({resp.status_code})")
+                    except Exception as ex:
+                        st.error(f"网络请求失败: {str(ex)}")
 elif ai_provider == "HuggingFace":
     os.environ["AI_PROVIDER"] = "huggingface"
     prefill_key = _get_secret_or_env("HUGGINGFACE_API_KEY")

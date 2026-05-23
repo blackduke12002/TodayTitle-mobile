@@ -216,24 +216,51 @@ def _call_deepseek(messages: List[Dict], temperature: float = 0.8, max_tokens: i
     api_key = os.environ.get("DEEPSEEK_API_KEY")
     if not api_key:
         raise ValueError("请设置环境变量 DEEPSEEK_API_KEY")
-    
+
+    base_url = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1/chat/completions")
+    model = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
+
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
     payload = {
-        "model": "deepseek-chat",
+        "model": model,
         "messages": messages,
         "temperature": temperature,
         "max_tokens": max_tokens,
     }
-    resp = requests.post("https://api.deepseek.com/v1/chat/completions", json=payload, headers=headers, timeout=120)
-    resp.raise_for_status()
-    data = resp.json()
-    
+
+    sanitized = []
+    for msg in messages:
+        m = msg.copy()
+        if "content" in m and isinstance(m["content"], str):
+            m["content"] = clean_unicode(m["content"])
+        sanitized.append(m)
+    payload["messages"] = sanitized
+
+    try:
+        resp = requests.post(base_url, json=payload, headers=headers, timeout=180)
+    except requests.exceptions.RequestException as e:
+        raise AIRewriteError(f"API网络请求失败: {str(e)}")
+
+    if resp.status_code == 401:
+        raise AIRewriteError("API密钥无效(401)：请检查并更新您的API Key")
+    if resp.status_code == 402:
+        raise AIRewriteError("API账户余额不足(402)：请前往平台充值，或更换API Key")
+    if resp.status_code == 429:
+        raise AIRewriteError("API请求频率超限(429)：请稍后重试")
+    if not resp.ok:
+        raise AIRewriteError(f"API请求失败({resp.status_code})")
+
+    try:
+        data = resp.json()
+    except ValueError:
+        raise AIRewriteError("API返回数据解析失败")
+
     if "choices" not in data or not data["choices"]:
-        raise AIRewriteError(f"AI返回异常: {json.dumps(data, ensure_ascii=False)[:200]}")
-    
+        raise AIRewriteError(f"AI返回异常: {str(data)[:200]}")
+
     content = data["choices"][0]["message"]["content"]
     return clean_unicode(content)
 

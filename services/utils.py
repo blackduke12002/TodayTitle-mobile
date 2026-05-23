@@ -6,7 +6,7 @@ def clean_unicode(text: str) -> str:
     """清理字符串中的非法Unicode字符。"""
     if not text:
         return ""
-    
+
     cleaned = []
     i = 0
     while i < len(text):
@@ -27,7 +27,17 @@ def clean_unicode(text: str) -> str:
         else:
             cleaned.append(text[i])
             i += 1
-    
-    result = ''.join(cleaned)
-    result = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]', '', result)
+
+    result = "".join(cleaned)
+    # Remove control characters except tab, newline, carriage return
+    result = re.sub("".join([
+        "[",
+        chr(0), "-", chr(8),  # 0x00-0x08
+        chr(11), "-", chr(12),  # 0x0B-0x0C
+        chr(14), "-", chr(31),  # 0x0E-0x1F
+        chr(127), "-", chr(159),  # 0x7F-0x9F
+        "]"
+    ]), "", result)
+    result = result.replace(chr(0x200B), "").replace(chr(0x200C), "").replace(chr(0x200D), "")
+    result = result.replace(chr(0xFEFF), "").replace(chr(0xA0), " ")
     return result.strip()
