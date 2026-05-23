@@ -10,6 +10,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
     - uses: actions/checkout@v4
@@ -25,15 +26,17 @@ jobs:
       with:
         api-level: 34
         build-tools: '34.0.0'
+        ndk: '25.2.9519653'
+        cmake: '3.22.1'
 
     - name: Make gradlew executable
       run: chmod +x android/gradlew
 
     - name: Build Debug APK
-      run: cd android && ./gradlew assembleDebug
+      run: cd android && ./gradlew assembleDebug --stacktrace -x test
 
     - name: Build Release APK
-      run: cd android && ./gradlew assembleRelease
+      run: cd android && ./gradlew assembleRelease --stacktrace -x test
 
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4
