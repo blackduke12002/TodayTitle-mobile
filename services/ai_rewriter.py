@@ -439,3 +439,74 @@ def evaluate_article(article_text: str) -> Dict[str, str]:
     except Exception as e:
         print(f"AI call failed, using local fallback: {e}")
         return _simple_local_evaluate(article_text)
+
+
+# ── Multi-angle generation for custom hotspots ──────
+
+MICRO_ANGLES = [
+    "打工人心声/职场成长：从普通打工人的真实感受出发，写成长、努力、坚持",
+    "人际交往/人情世故：从职场人际关系切入，写同事相处、上下级沟通、社交智慧",
+    "职业规划/个人发展：从职业发展方向切入，写选择、转型、储备、能力提升",
+]
+
+ARTICLE_ANGLES = [
+    "打工人心声/职场成长：从普通职场人的真实处境出发，深度剖析成长路径",
+    "人际交往/人情世故：从职场人际与处世智慧切入，探讨如何在复杂关系中自处",
+    "职业规划/个人发展：从职业规划高度切入，为职场人提供方向性思考",
+]
+
+
+def rewrite_micro_multi_angle(topic_name: str) -> list:
+    """Generate 3 micro-headlines from different career angles for a custom topic."""
+    results = []
+    for angle in MICRO_ANGLES:
+        system_prompt = (
+            "你是今日头条职场微头条爆款写手，全套遵循头条微头条流量与收益规则创作：\n"
+            "1.字数严格锁定100-300字黄金区间，保障超高完读率；\n"
+            "2.开篇优先使用热点切入、身边简短小故事两种写法，第一时间抓住眼球留住读者；\n"
+            "3.坚守职场垂直赛道，主打打工人心声、中年感悟、职场清醒三观；\n"
+            "4.排版简洁清爽，短句精简，语言直白易懂，阅读无压力；\n"
+            "5.可自然嫁接全网各类热点，只提炼职场处世、心态成长相关道理，严守内容安全底线；\n"
+            f"本次写作角度：{angle}\n"
+            "直接纯净输出微头条正文，禁止添加任何前缀说明。"
+        )
+        user_prompt = f"热点话题：{topic_name}\n\n请从指定角度将上述热点改写为一篇职场主题的爆款微头条。"
+        try:
+            content = _call_ai(
+                [{"role": "system", "content": system_prompt},
+                 {"role": "user", "content": user_prompt}],
+                temperature=0.9,
+            )
+            results.append(content.strip())
+        except Exception:
+            results.append(_simple_local_rewrite_micro(topic_name))
+    return results
+
+
+def rewrite_article_multi_angle(topic_name: str) -> list:
+    """Generate 3 long-form articles from different career angles for a custom topic."""
+    results = []
+    for angle in ARTICLE_ANGLES:
+        system_prompt = (
+            "你是今日头条职场领域资深爆款专职写手，严格遵循头条职场流量规则创作文章：\n"
+            "1.优先使用热点开篇或现实故事开篇；\n"
+            "2.锁定职场/职场经验垂直领域；\n"
+            "3.正文字数800-1200字最优区间，短句行文；\n"
+            f"本次写作角度：{angle}\n\n"
+            "请严格按以下JSON格式返回，不要输出任何多余文字：\n"
+            '{"title": "文章标题", "summary": "导语一句话", '
+            '"body": "正文内容（用\\\\n\\\\n分隔自然段落）"}'
+        )
+        user_prompt = f"热点话题：{topic_name}\n\n请从指定角度将上述热点写成一篇今日头条爆款职场分析文章。"
+        try:
+            content = _call_ai(
+                [{"role": "system", "content": system_prompt},
+                 {"role": "user", "content": user_prompt}],
+                temperature=0.85,
+                max_tokens=4096,
+            )
+            content = _strip_json(content)
+            results.append(json.loads(content))
+        except Exception:
+            results.append(_simple_local_rewrite_article(topic_name))
+    return results

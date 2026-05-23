@@ -10,6 +10,8 @@ from services.ai_rewriter import (
     evaluate_traffic_potential,
     select_top3_for_articles, rewrite_to_article,
     evaluate_article, AIRewriteError,
+    rewrite_micro_multi_angle, rewrite_article_multi_angle,
+    MICRO_ANGLES, ARTICLE_ANGLES,
 )
 import pyperclip
 
@@ -225,6 +227,7 @@ for key, default in {
     "article_eval_0": {}, "article_eval_1": {}, "article_eval_2": {},
     "micro_generated": False, "article_generated": False,
     "selected_micro": [], "selected_article": [],
+    "source_mode": "fetched", "custom_hotspots": [],
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -258,6 +261,47 @@ if st.session_state.hotspots_fetched:
         st.markdown(f'<div class="hot-item">{i + 1}. {t["name"]}<small style="color:#888;">{hot_text}</small></div>',
                     unsafe_allow_html=True)
 
+# ── Source mode & custom hotspots ──
+source_mode = st.radio(
+    "内容来源",
+    ["获取的热点", "自定义热点"],
+    horizontal=True,
+    key="source_mode_radio",
+    index=0 if st.session_state.source_mode == "fetched" else 1,
+)
+st.session_state.source_mode = "fetched" if source_mode == "获取的热点" else "custom"
+
+if st.session_state.source_mode == "custom":
+    col_input, col_btn = st.columns([4, 1])
+    with col_input:
+        custom_input = st.text_input(
+            "输入你想追的热点话题",
+            placeholder="输入热点话题，点击添加...",
+            key="custom_input",
+            label_visibility="collapsed",
+        )
+    with col_btn:
+        if st.button("添加", key="add_custom", use_container_width=True):
+            topic = custom_input.strip()
+            if topic:
+                st.session_state.custom_hotspots.append({
+                    "name": topic, "hot": "自定义",
+                })
+                st.rerun()
+
+    if st.session_state.custom_hotspots:
+        for i, t in enumerate(st.session_state.custom_hotspots):
+            col_name, col_del = st.columns([5, 1])
+            with col_name:
+                st.markdown(f'{i + 1}. {t["name"]} <small style="color:#888;">(自定义)</small>',
+                            unsafe_allow_html=True)
+            with col_del:
+                if st.button("删除", key=f"del_custom_{i}", use_container_width=True):
+                    st.session_state.custom_hotspots.pop(i)
+                    st.rerun()
+    else:
+        st.info("添加自定义热点话题后，AI 将从3个不同角度生成内容")
+
 st.markdown("---")
 
 # ── Tabs ──
@@ -265,10 +309,18 @@ tab1, tab2 = st.tabs(["📝 微头条", "📄 爆款文案"])
 
 # ========== TAB 1: 微头条 ==========
 with tab1:
-    if st.session_state.hotspots_fetched:
+    has_source = (
+        st.session_state.hotspots_fetched and st.session_state.source_mode == "fetched"
+    ) or (
+        len(st.session_state.custom_hotspots) > 0 and st.session_state.source_mode == "custom"
+    )
+    if has_source:
         gen_micro = st.button("生成微头条", type="primary", key="gen_micro")
     else:
-        st.info("请先在上方获取今日热点")
+        if st.session_state.source_mode == "custom":
+            st.info("请先在上方添加自定义热点")
+        else:
+            st.info("请先在上方获取今日热点")
         gen_micro = False
 
     if gen_micro:
@@ -277,29 +329,50 @@ with tab1:
             st.session_state[f"micro_{i}"] = ""
             st.session_state[f"micro_eval_{i}"] = {}
 
-        with st.spinner("正在AI筛选与改写..."):
+        is_custom = st.session_state.source_mode == "custom"
+
+        with st.spinner("正在AI多角度改写..." if is_custom else "正在AI筛选与改写..."):
             try:
-                topics = st.session_state.hotspots
-                selected = select_top3_for_viral(topics)
-                st.session_state.selected_micro = selected
+                if is_custom:
+                    topic_name = st.session_state.custom_hotspots[0]["name"]
+                    results = rewrite_micro_multi_angle(topic_name)
+                    st.session_state.selected_micro = [
+                        {"index": i + 1, "name": topic_name, "reason": MICRO_ANGLES[i]}
+                        for i in range(3)
+                    ]
+                    for i, micro_text in enumerate(results):
+                        st.session_state[f"micro_{i}"] = micro_text
+                        try:
+                            eval_data = evaluate_traffic_potential(micro_text)
+                            st.session_state[f"micro_eval_{i}"] = eval_data
+                        except Exception:
+                            st.session_state[f"micro_eval_{i}"] = {
+                                "traffic_level": "未知",
+                                "traffic_comment": "评价暂时无法获取",
+                                "originality": "评价暂时无法获取",
+                            }
+                else:
+                    topics = st.session_state.hotspots
+                    selected = select_top3_for_viral(topics)
+                    st.session_state.selected_micro = selected
 
-                for i, item in enumerate(selected):
-                    status_text = st.empty()
-                    status_text.write(f"⏳ 正在生成微头条 {i + 1}/3...")
+                    for i, item in enumerate(selected):
+                        status_text = st.empty()
+                        status_text.write(f"⏳ 正在生成微头条 {i + 1}/3...")
 
-                    micro_text = rewrite_to_micro_headline(item["name"])
-                    st.session_state[f"micro_{i}"] = micro_text
+                        micro_text = rewrite_to_micro_headline(item["name"])
+                        st.session_state[f"micro_{i}"] = micro_text
 
-                    try:
-                        eval_data = evaluate_traffic_potential(micro_text)
-                        st.session_state[f"micro_eval_{i}"] = eval_data
-                    except Exception:
-                        st.session_state[f"micro_eval_{i}"] = {
-                            "traffic_level": "未知",
-                            "traffic_comment": "评价暂时无法获取",
-                            "originality": "评价暂时无法获取",
-                        }
-                    status_text.empty()
+                        try:
+                            eval_data = evaluate_traffic_potential(micro_text)
+                            st.session_state[f"micro_eval_{i}"] = eval_data
+                        except Exception:
+                            st.session_state[f"micro_eval_{i}"] = {
+                                "traffic_level": "未知",
+                                "traffic_comment": "评价暂时无法获取",
+                                "originality": "评价暂时无法获取",
+                            }
+                        status_text.empty()
 
                 st.session_state.micro_generated = True
                 st.success("生成完成！")
@@ -315,9 +388,14 @@ with tab1:
             char_count = len(text.replace("\n", "").replace(" ", ""))
             eval_data = st.session_state.get(f"micro_eval_{i}", {})
 
+            # Angle label for custom mode
+            angle_label = ""
+            if st.session_state.source_mode == "custom" and i < len(MICRO_ANGLES):
+                angle_label = f" — {MICRO_ANGLES[i].split('：')[0]}"
+
             with st.container():
                 st.markdown('<div class="result-card">', unsafe_allow_html=True)
-                st.markdown(f"**爆款微头条 #{i + 1}** <span class='char-count'>({char_count}字)</span>",
+                st.markdown(f"**爆款微头条 #{i + 1}{angle_label}** <span class='char-count'>({char_count}字)</span>",
                             unsafe_allow_html=True)
 
                 st.code(text, language=None)
@@ -362,10 +440,18 @@ with tab1:
 
 # ========== TAB 2: 爆款文案 ==========
 with tab2:
-    if st.session_state.hotspots_fetched:
+    has_source = (
+        st.session_state.hotspots_fetched and st.session_state.source_mode == "fetched"
+    ) or (
+        len(st.session_state.custom_hotspots) > 0 and st.session_state.source_mode == "custom"
+    )
+    if has_source:
         gen_article = st.button("生成爆款文案", type="primary", key="gen_article")
     else:
-        st.info("请先在上方获取今日热点")
+        if st.session_state.source_mode == "custom":
+            st.info("请先在上方添加自定义热点")
+        else:
+            st.info("请先在上方获取今日热点")
         gen_article = False
 
     if gen_article:
@@ -374,30 +460,52 @@ with tab2:
             st.session_state[f"article_{i}"] = {}
             st.session_state[f"article_eval_{i}"] = {}
 
-        with st.spinner("正在AI筛选与生成文章..."):
+        is_custom = st.session_state.source_mode == "custom"
+
+        with st.spinner("正在AI多角度生成文章..." if is_custom else "正在AI筛选与生成文章..."):
             try:
-                topics = st.session_state.hotspots
-                selected = select_top3_for_articles(topics)
-                st.session_state.selected_article = selected
+                if is_custom:
+                    topic_name = st.session_state.custom_hotspots[0]["name"]
+                    results = rewrite_article_multi_angle(topic_name)
+                    st.session_state.selected_article = [
+                        {"index": i + 1, "name": topic_name, "reason": ARTICLE_ANGLES[i]}
+                        for i in range(3)
+                    ]
+                    for i, article in enumerate(results):
+                        st.session_state[f"article_{i}"] = article
+                        full_text = f"{article.get('title', '')}\n{article.get('summary', '')}\n{article.get('body', '')}"
+                        try:
+                            eval_data = evaluate_article(full_text)
+                            st.session_state[f"article_eval_{i}"] = eval_data
+                        except Exception:
+                            st.session_state[f"article_eval_{i}"] = {
+                                "traffic_level": "未知",
+                                "traffic_comment": "评价暂时无法获取",
+                                "originality": "评价暂时无法获取",
+                            }
+                else:
+                    topics = st.session_state.hotspots
+                    selected = select_top3_for_articles(topics)
+                    st.session_state.selected_article = selected
 
-                for i, item in enumerate(selected):
-                    status_text = st.empty()
-                    status_text.write(f"⏳ 正在生成文章 {i + 1}/3...")
+                    for i, item in enumerate(selected):
+                        status_text = st.empty()
+                        status_text.write(f"⏳ 正在生成文章 {i + 1}/3...")
 
-                    article = rewrite_to_article(item["name"])
-                    st.session_state[f"article_{i}"] = article
+                        article = rewrite_to_article(item["name"])
+                        st.session_state[f"article_{i}"] = article
 
-                    full_text = f"{article.get('title', '')}\n{article.get('summary', '')}\n{article.get('body', '')}"
-                    try:
-                        eval_data = evaluate_article(full_text)
-                        st.session_state[f"article_eval_{i}"] = eval_data
-                    except Exception:
-                        st.session_state[f"article_eval_{i}"] = {
-                            "traffic_level": "未知",
-                            "traffic_comment": "评价暂时无法获取",
-                            "originality": "评价暂时无法获取",
-                        }
-                    status_text.empty()
+                        full_text = f"{article.get('title', '')}\n{article.get('summary', '')}\n{article.get('body', '')}"
+                        try:
+                            eval_data = evaluate_article(full_text)
+                            st.session_state[f"article_eval_{i}"] = eval_data
+                        except Exception:
+                            st.session_state[f"article_eval_{i}"] = {
+                                "traffic_level": "未知",
+                                "traffic_comment": "评价暂时无法获取",
+                                "originality": "评价暂时无法获取",
+                            }
+                        status_text.empty()
 
                 st.session_state.article_generated = True
                 st.success("文章生成完成！")
@@ -417,9 +525,14 @@ with tab2:
             char_count = len(full_text.replace("\n", "").replace(" ", ""))
             eval_data = st.session_state.get(f"article_eval_{i}", {})
 
+            # Angle label for custom mode
+            angle_label = ""
+            if st.session_state.source_mode == "custom" and i < len(ARTICLE_ANGLES):
+                angle_label = f" — {ARTICLE_ANGLES[i].split('：')[0]}"
+
             with st.container():
                 st.markdown('<div class="result-card">', unsafe_allow_html=True)
-                st.markdown(f"**爆款文案 #{i + 1}** <span class='char-count'>({char_count}字)</span>",
+                st.markdown(f"**爆款文案 #{i + 1}{angle_label}** <span class='char-count'>({char_count}字)</span>",
                             unsafe_allow_html=True)
 
                 formatted = f"【标题】\n{title}\n\n【导语】\n{summary}\n\n【正文】\n{body}"
