@@ -13,6 +13,14 @@ from services.ai_rewriter import (
 )
 import pyperclip
 
+
+def _get_secret_or_env(key: str, default: str = "") -> str:
+    """Try st.secrets first (Streamlit Cloud), then env var, then default."""
+    try:
+        return st.secrets.get(key, os.environ.get(key, default))
+    except Exception:
+        return os.environ.get(key, default)
+
 st.set_page_config(
     page_title="今日爆款内容生成器",
     page_icon="📰",
@@ -99,9 +107,11 @@ if ai_provider == "本地模式（免费）":
     st.sidebar.success("使用本地模式，无需 API Key")
 elif ai_provider == "Gemini（免费额度）":
     os.environ["AI_PROVIDER"] = "gemini"
+    prefill_key = _get_secret_or_env("GOOGLE_API_KEY")
     gemini_key = st.sidebar.text_input(
         "Google API Key",
         type="password",
+        value=prefill_key,
         placeholder="请输入 Google API Key",
         help="获取地址: https://makersuite.google.com/"
     )
@@ -112,9 +122,11 @@ elif ai_provider == "Gemini（免费额度）":
         st.sidebar.warning("请设置 Google API Key")
 elif ai_provider == "DeepSeek":
     os.environ["AI_PROVIDER"] = "deepseek"
+    prefill_key = _get_secret_or_env("DEEPSEEK_API_KEY")
     deepseek_key = st.sidebar.text_input(
         "DeepSeek API Key",
         type="password",
+        value=prefill_key,
         placeholder="请输入 DeepSeek API Key",
         help="获取地址: https://platform.deepseek.com/"
     )
@@ -125,9 +137,11 @@ elif ai_provider == "DeepSeek":
         st.sidebar.warning("请设置 DeepSeek API Key")
 elif ai_provider == "HuggingFace":
     os.environ["AI_PROVIDER"] = "huggingface"
+    prefill_key = _get_secret_or_env("HUGGINGFACE_API_KEY")
     hf_key = st.sidebar.text_input(
         "HuggingFace API Key",
         type="password",
+        value=prefill_key,
         placeholder="请输入 HuggingFace API Key",
         help="获取地址: https://huggingface.co/settings/tokens"
     )
