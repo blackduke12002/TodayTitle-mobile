@@ -22,8 +22,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var retryButton: Button
     private lateinit var swipeRefreshLayout: SwipeRefreshLayout
 
-    // 后端服务器地址 - 需要修改为实际的部署地址
-    private val BASE_URL = "http://10.0.2.2:8501" // 10.0.2.2 是 Android 模拟器访问主机 localhost 的地址
+    // 后端服务器地址 - Streamlit Cloud 部署地址
+    private val BASE_URL = "https://todaytitle-mobile-khf9v7lnnn3dyhydudokt7.streamlit.app/"
 
     companion object {
         private const val PREFS_NAME = "TodayTitlePrefs"
